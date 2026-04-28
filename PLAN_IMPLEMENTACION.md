@@ -5,6 +5,7 @@ Este documento define los pasos para construir la app en 3 etapas, desde la base
 ## Vision del proyecto
 
 Construir una app de pomodoro que permita:
+
 - Iniciar y finalizar bloques de foco.
 - Registrar automaticamente cada bloque como evento en Google Calendar.
 - Conservar un historial util para analizar progreso (trabajo, gimnasio, estudio, etc.).
@@ -16,7 +17,8 @@ Construir una app de pomodoro que permita:
 Objetivo: dejar una base robusta de frontend/backend para iterar rapido.
 
 ### 1.1 Inicializacion y estructura
-- [x] Crear proyecto con Next.js (App Router, TypeScript, ESLint, Tailwind).
+
+- [X] Crear proyecto con Next.js (App Router, TypeScript, ESLint, Tailwind).
 - [ ] Definir estructura de carpetas:
   - `app/` para rutas y layouts
   - `components/` para UI reusable
@@ -25,14 +27,16 @@ Objetivo: dejar una base robusta de frontend/backend para iterar rapido.
   - `app/api/` para endpoints server-side
 
 ### 1.2 Modelo funcional minimo (MVP UI)
+
 - [ ] Crear pantalla principal con:
-  - Temporizador pomodoro
-  - Selector de tipo de bloque (trabajo/gimnasio/estudio/personal)
-  - Campo de titulo/descripcion del bloque
-  - Botones de iniciar, pausar y finalizar
+  - [ ] Temporizador pomodoro
+  - [ ] Selector de tipo de bloque (trabajo/gimnasio/estudio/personal)
+  - [ ] Campo de titulo/descripcion del bloque
+  - [ ] Botones de iniciar, pausar y finalizar
 - [ ] Crear vista de historial local (inicialmente mock o memoria).
 
 ### 1.3 Persistencia inicial
+
 - [ ] Elegir base de datos (sugerido: PostgreSQL + Prisma o Supabase).
 - [ ] Crear entidad `PomodoroSession` con campos base:
   - `id`
@@ -47,6 +51,7 @@ Objetivo: dejar una base robusta de frontend/backend para iterar rapido.
 - [ ] Crear endpoints CRUD basicos para sesiones.
 
 ### 1.4 Criterio de cierre etapa 1
+
 - App corre localmente.
 - Se puede completar un pomodoro y ver su registro persistido en la app.
 - API interna lista para conectar con Google en la siguiente etapa.
@@ -58,6 +63,7 @@ Objetivo: dejar una base robusta de frontend/backend para iterar rapido.
 Objetivo: autenticar usuario y preparar sincronizacion segura con Google Calendar.
 
 ### 2.1 Autenticacion OAuth con Google
+
 - [ ] Implementar login con Google (NextAuth/Auth.js recomendado).
 - [ ] Solicitar scopes minimos necesarios:
   - `openid`, `email`, `profile`
@@ -65,17 +71,20 @@ Objetivo: autenticar usuario y preparar sincronizacion segura con Google Calenda
 - [ ] Gestionar y refrescar tokens de acceso de forma segura.
 
 ### 2.2 Integracion base con Google Calendar API
+
 - [ ] Configurar cliente de Google API en servidor (`lib/google-calendar.ts`).
 - [ ] Probar lectura de calendarios del usuario.
 - [ ] Definir calendario destino (principal o uno dedicado "Pomodoro Tracker").
 
 ### 2.3 Estrategia de almacenamiento
+
 - [ ] Definir fuente de verdad:
   - Opcion recomendada: DB propia como fuente principal + Google Calendar como espejo de agenda.
 - [ ] Guardar relacion entre sesion local y evento Google (`calendarEventId`).
 - [ ] Manejar reintentos ante fallos de red/API.
 
 ### 2.4 Criterio de cierre etapa 2
+
 - Usuario puede autenticarse con Google.
 - App crea y valida conexion con Google Calendar.
 - Existe pipeline seguro para crear/actualizar eventos y asociarlos a sesiones locales.
@@ -87,11 +96,13 @@ Objetivo: autenticar usuario y preparar sincronizacion segura con Google Calenda
 Objetivo: cerrar flujo end-to-end desde temporizador hasta trazabilidad historica.
 
 ### 3.1 Flujo final del pomodoro
+
 - [ ] Al iniciar: crear sesion en estado `running`.
 - [ ] Al pausar/reanudar: actualizar metadata de sesion.
 - [ ] Al finalizar: cerrar sesion (`endTime`, `durationMinutes`, `status=completed`).
 
 ### 3.2 Creacion de evento en Google Calendar
+
 - [ ] Al finalizar un bloque, crear evento con:
   - Titulo del bloque
   - Categoria
@@ -101,6 +112,7 @@ Objetivo: cerrar flujo end-to-end desde temporizador hasta trazabilidad historic
 - [ ] En caso de fallo, marcar sesion como `sync_pending` para reintento.
 
 ### 3.3 Historial y analitica basica
+
 - [ ] Implementar historial filtrable por:
   - Fecha
   - Categoria
@@ -111,6 +123,7 @@ Objetivo: cerrar flujo end-to-end desde temporizador hasta trazabilidad historic
   - Racha de dias con actividad
 
 ### 3.4 Criterio de cierre etapa 3
+
 - Cada pomodoro completado deja registro local y evento en Google Calendar.
 - Historial visible y util para seguimiento personal.
 - Flujo estable frente a errores comunes (token expirado, red, limite API).
