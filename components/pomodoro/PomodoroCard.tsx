@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { PRESETS } from "./constants";
 import { CustomPresetModal } from "./CustomPresetModal";
 import { PhaseBadge } from "./PhaseBadge";
+import { playBell } from "./playBell";
 import { PresetSelector } from "./PresetSelector";
 import { SessionHistory } from "./SessionHistory";
 import { TimerControls } from "./TimerControls";
@@ -12,13 +13,42 @@ import type { PomodoroHistoryRecord, PomodoroPreset } from "./types";
 
 export function PomodoroCard() {
   const [selectedPresetId, setSelectedPresetId] = useState(PRESETS[0].id);
+  const [sessionActive, setSessionActive] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isBreakTime, setIsBreakTime] = useState(false);
   const [pomodoroName, setPomodoroName] = useState("Focus session");
   const [historyRecords, setHistoryRecords] = useState<PomodoroHistoryRecord[]>([]);
   const [customPreset, setCustomPreset] = useState<PomodoroPreset | null>(null);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(false);
   const phaseCompletionHandledRef = useRef(false);
+  const soundMutedRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("pomodoro-sound-muted") === "true") {
+        setSoundMuted(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    soundMutedRef.current = soundMuted;
+  }, [soundMuted]);
+
+  const toggleSoundMuted = () => {
+    setSoundMuted((current) => {
+      const next = !current;
+      try {
+        localStorage.setItem("pomodoro-sound-muted", String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   const selectedPreset = useMemo(
     () => (selectedPresetId === "custom" && customPreset ? customPreset : PRESETS.find((preset) => preset.id === selectedPresetId) ?? PRESETS[0]),
@@ -51,7 +81,15 @@ export function PomodoroCard() {
     ]);
   };
 
+  const completeSessionWithOptionalSound = () => {
+    if (!soundMutedRef.current) {
+      void playBell();
+    }
+    addHistoryRecord();
+  };
+
   useEffect(() => {
+    setSessionActive(false);
     setIsRunning(false);
     setIsBreakTime(false);
     setSecondsLeft(selectedPreset.workMinutes * 60);
@@ -79,7 +117,8 @@ export function PomodoroCard() {
     phaseCompletionHandledRef.current = true;
 
     if (isBreakTime) {
-      addHistoryRecord();
+      completeSessionWithOptionalSound();
+      setSessionActive(false);
       setIsRunning(false);
       setIsBreakTime(false);
       setSecondsLeft(selectedPreset.workMinutes * 60);
@@ -92,16 +131,27 @@ export function PomodoroCard() {
       return;
     }
 
-    addHistoryRecord();
+    completeSessionWithOptionalSound();
+    setSessionActive(false);
     setIsRunning(false);
     setSecondsLeft(selectedPreset.workMinutes * 60);
   }, [secondsLeft, isRunning, isBreakTime, selectedPreset, pomodoroName]);
 
-  const stopTimer = () => {
+  const stopPomodoroSession = () => {
+    setSessionActive(false);
     setIsRunning(false);
     setIsBreakTime(false);
     setSecondsLeft(selectedPreset.workMinutes * 60);
     phaseCompletionHandledRef.current = false;
+  };
+
+  const startOrResumeSession = () => {
+    setSessionActive(true);
+    setIsRunning(true);
+  };
+
+  const pauseSession = () => {
+    setIsRunning(false);
   };
 
   const handlePresetSelect = (presetId: string) => {
@@ -165,7 +215,21 @@ export function PomodoroCard() {
           />
           <PhaseBadge isBreakTime={isBreakTime} />
           <TimerDisplay secondsLeft={secondsLeft} isBreakTime={isBreakTime} />
-          <TimerControls onStart={() => setIsRunning(true)} onStop={stopTimer} />
+          <button
+            type="button"
+            onClick={toggleSoundMuted}
+            className="text-sm text-zinc-500 underline-offset-4 transition hover:text-zinc-300 hover:underline"
+            aria-pressed={soundMuted}
+          >
+            {soundMuted ? "Unmute completion sound" : "Mute completion sound"}
+          </button>
+          <TimerControls
+            sessionState={!sessionActive ? "idle" : isRunning ? "running" : "paused"}
+            onStart={startOrResumeSession}
+            onStopPomodoro={stopPomodoroSession}
+            onPause={pauseSession}
+            onResume={startOrResumeSession}
+          />
         </div>
         </section>
       </div>
