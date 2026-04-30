@@ -10,4 +10,9 @@ export type PomodoroHistoryRecord = {
   name: string;
   presetLabel: string;
   completedAt: string;
+  completedAtISO: string;
+  durationMinutes: number;
+  exportedToDrive?: boolean;
+  calendarSynced?: boolean;
+  calendarEventId?: string;
 };

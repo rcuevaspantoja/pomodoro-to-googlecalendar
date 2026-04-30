@@ -26,4 +26,20 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
+  callbacks: {
+    async jwt({ token, account }) {
+      if (account?.access_token) {
+        token.accessToken = account.access_token;
+      }
+
+      return token;
+    },
+    async session({ session, token }) {
+      if (token.accessToken) {
+        session.accessToken = token.accessToken as string;
+      }
+
+      return session;
+    },
+  },
 };

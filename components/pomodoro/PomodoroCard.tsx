@@ -23,9 +23,17 @@ export function PomodoroCard() {
   const [historyRecords, setHistoryRecords] = useState<PomodoroHistoryRecord[]>([]);
   const [customPreset, setCustomPreset] = useState<PomodoroPreset | null>(null);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(false);
+  const [didLoadDriveSettings, setDidLoadDriveSettings] = useState(false);
   const [soundMuted, setSoundMuted] = useState(false);
+  const [didLoadDriveData, setDidLoadDriveData] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+  const isDriveLoading = status === "authenticated" && !didLoadDriveData;
   const phaseCompletionHandledRef = useRef(false);
   const soundMutedRef = useRef(false);
+  const skipNextSyncRef = useRef(false);
+  const skipNextSettingsSaveRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -78,7 +86,9 @@ export function PomodoroCard() {
         id: crypto.randomUUID(),
         name: cleanName,
         presetLabel: selectedPreset.label,
+        durationMinutes: selectedPreset.workMinutes,
         completedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        completedAtISO: new Date().toISOString(),
       },
       ...currentRecords,
     ]);
@@ -90,6 +100,185 @@ export function PomodoroCard() {
     }
     addHistoryRecord();
   };
+
+  useEffect(() => {
+    if (status !== "authenticated") {
+      setDidLoadDriveData(false);
+      setDidLoadDriveSettings(false);
+      setSyncStatus("idle");
+      skipNextSyncRef.current = false;
+      skipNextSettingsSaveRef.current = false;
+      return;
+    }
+
+    let isCancelled = false;
+
+    const loadFromDrive = async () => {
+      setSyncStatus("syncing");
+      try {
+        const response = await fetch("/api/drive/pomodoros", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Unable to load records");
+        }
+
+        const data = (await response.json()) as { records?: PomodoroHistoryRecord[] };
+        if (!isCancelled && Array.isArray(data.records)) {
+          // Evita que la hidratacion inicial desde Drive dispare un POST innecesario.
+          skipNextSyncRef.current = true;
+          setHistoryRecords(data.records);
+          setSyncStatus("synced");
+        }
+      } catch {
+        if (!isCancelled) {
+          setSyncStatus("error");
+        }
+      } finally {
+        if (!isCancelled) {
+          setDidLoadDriveData(true);
+        }
+      }
+    };
+
+    void loadFromDrive();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated") return;
+
+    let isCancelled = false;
+
+    const loadSettingsFromDrive = async () => {
+      try {
+        const response = await fetch("/api/drive/settings", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Unable to load settings");
+        }
+
+        const data = (await response.json()) as { calendarSyncEnabled?: boolean };
+        if (!isCancelled) {
+          skipNextSettingsSaveRef.current = true;
+          setCalendarSyncEnabled(Boolean(data.calendarSyncEnabled));
+        }
+      } finally {
+        if (!isCancelled) {
+          setDidLoadDriveSettings(true);
+        }
+      }
+    };
+
+    void loadSettingsFromDrive();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [status]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !didLoadDriveSettings) return;
+    if (skipNextSettingsSaveRef.current) {
+      skipNextSettingsSaveRef.current = false;
+      return;
+    }
+
+    void fetch("/api/drive/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ calendarSyncEnabled }),
+    });
+  }, [calendarSyncEnabled, status, didLoadDriveSettings]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !didLoadDriveData) return;
+    if (skipNextSyncRef.current) {
+      skipNextSyncRef.current = false;
+      return;
+    }
+
+    let isCancelled = false;
+
+    const syncToDrive = async () => {
+      setSyncStatus("syncing");
+      try {
+        const response = await fetch("/api/drive/pomodoros", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ records: historyRecords }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to save records");
+        }
+
+        if (!isCancelled) {
+          setSyncStatus("synced");
+        }
+      } catch {
+        if (!isCancelled) {
+          setSyncStatus("error");
+        }
+      }
+    };
+
+    void syncToDrive();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [historyRecords, status, didLoadDriveData]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !didLoadDriveData || !calendarSyncEnabled) return;
+
+    const pending = historyRecords.filter((record) => !record.calendarSynced);
+    if (pending.length === 0) return;
+
+    let isCancelled = false;
+
+    const syncPendingRecordsToCalendar = async () => {
+      for (const record of pending) {
+        try {
+          const response = await fetch("/api/calendar/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ record }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Unable to sync calendar event");
+          }
+
+          const data = (await response.json()) as { eventId?: string | null };
+          if (!isCancelled) {
+            setHistoryRecords((currentRecords) =>
+              currentRecords.map((currentRecord) =>
+                currentRecord.id === record.id
+                  ? {
+                      ...currentRecord,
+                      calendarSynced: true,
+                      calendarEventId: data.eventId ?? undefined,
+                    }
+                  : currentRecord,
+              ),
+            );
+          }
+        } catch {
+          if (!isCancelled) {
+            setSyncStatus("error");
+          }
+        }
+      }
+    };
+
+    void syncPendingRecordsToCalendar();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [status, didLoadDriveData, calendarSyncEnabled, historyRecords]);
 
   useEffect(() => {
     setSessionActive(false);
@@ -187,17 +376,62 @@ export function PomodoroCard() {
     setSelectedPresetId("custom");
   };
 
+  const toggleCalendarSync = () => {
+    setCalendarSyncEnabled((current) => !current);
+  };
+
+  const handleDeleteRecord = async (record: PomodoroHistoryRecord) => {
+    try {
+      if (record.calendarEventId) {
+        const response = await fetch("/api/calendar/events", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eventId: record.calendarEventId }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Unable to delete calendar event");
+        }
+      }
+
+      setHistoryRecords((currentRecords) =>
+        currentRecords.filter((currentRecord) => currentRecord.id !== record.id),
+      );
+    } catch {
+      setSyncStatus("error");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-black px-6 py-8 text-zinc-100">
       <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[320px_1fr]">
-        <SessionHistory records={historyRecords} />
+        <SessionHistory
+          records={historyRecords}
+          isLoading={isDriveLoading}
+          onDeleteRecord={handleDeleteRecord}
+        />
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 shadow-2xl shadow-black/40">
         <div className="flex flex-col items-center gap-6 text-center">
-          <div className="flex w-full items-center justify-end">
+          <div className="flex w-full items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setIsSettingsOpen(true)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md transition hover:bg-zinc-900/80"
+              aria-label="Open settings"
+            >
+              <img src="/sounds/images/gear.svg" alt="Settings" className="h-5 w-5" />
+            </button>
             {status === "authenticated" ? (
               <div className="flex items-center gap-3 text-sm text-zinc-300">
                 <span>Hi, {firstName}</span>
+                {syncStatus === "syncing" ? (
+                  <img src="/sounds/images/syncing.svg" alt="Syncing" className="h-4 w-4" />
+                ) : null}
+                {syncStatus === "synced" ? (
+                  <img src="/sounds/images/check_mark.svg" alt="Synced" className="h-4 w-4" />
+                ) : null}
+                {syncStatus === "error" ? <span className="text-rose-400">sync failed</span> : null}
                 <button
                   type="button"
                   onClick={() => void signOut()}
@@ -268,6 +502,55 @@ export function PomodoroCard() {
         onClose={() => setIsCustomModalOpen(false)}
         onSave={handleSaveCustomPreset}
       />
+      {isSettingsOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Settings"
+          onClick={() => setIsSettingsOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl shadow-black/60"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(false)}
+                className="rounded-md border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition hover:border-zinc-500 hover:text-zinc-100"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-900/70 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">Sync with Google Calendar</p>
+                <p className="text-xs text-zinc-500">Optional export of sessions to Calendar.</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={calendarSyncEnabled}
+                onClick={toggleCalendarSync}
+                className={`relative h-6 w-11 rounded-full border transition ${
+                  calendarSyncEnabled
+                    ? "border-zinc-200 bg-zinc-100"
+                    : "border-zinc-700 bg-zinc-800"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 h-5 w-5 rounded-full transition ${
+                    calendarSyncEnabled ? "left-5 bg-black" : "left-0.5 bg-zinc-300"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
