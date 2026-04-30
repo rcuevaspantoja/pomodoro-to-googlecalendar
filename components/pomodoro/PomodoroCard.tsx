@@ -10,6 +10,7 @@ import { PresetSelector } from "./PresetSelector";
 import { SessionHistory } from "./SessionHistory";
 import { TimerControls } from "./TimerControls";
 import { TimerDisplay } from "./TimerDisplay";
+import { formatTime } from "./utils";
 import type { PomodoroHistoryRecord, PomodoroPreset } from "./types";
 
 export function PomodoroCard() {
@@ -20,6 +21,10 @@ export function PomodoroCard() {
   const [isRunning, setIsRunning] = useState(false);
   const [isBreakTime, setIsBreakTime] = useState(false);
   const [pomodoroName, setPomodoroName] = useState("Focus session");
+  const [stopwatchName, setStopwatchName] = useState("Open-ended task");
+  const [stopwatchActive, setStopwatchActive] = useState(false);
+  const [stopwatchRunning, setStopwatchRunning] = useState(false);
+  const [stopwatchSeconds, setStopwatchSeconds] = useState(0);
   const [historyRecords, setHistoryRecords] = useState<PomodoroHistoryRecord[]>([]);
   const [customPreset, setCustomPreset] = useState<PomodoroPreset | null>(null);
   const [isCustomModalOpen, setIsCustomModalOpen] = useState(false);
@@ -30,6 +35,8 @@ export function PomodoroCard() {
   const [didLoadDriveData, setDidLoadDriveData] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
   const isDriveLoading = status === "authenticated" && !didLoadDriveData;
+  const isPomodoroBlocked = stopwatchActive;
+  const isStopwatchBlocked = sessionActive;
   const phaseCompletionHandledRef = useRef(false);
   const soundMutedRef = useRef(false);
   const skipNextSyncRef = useRef(false);
@@ -99,6 +106,26 @@ export function PomodoroCard() {
       void playBell();
     }
     addHistoryRecord();
+  };
+
+  const addStopwatchRecord = () => {
+    if (stopwatchSeconds <= 0) return;
+
+    const cleanName = stopwatchName.trim() || "Untitled stopwatch";
+    const now = new Date();
+    const durationMinutes = Math.max(1, Math.round(stopwatchSeconds / 60));
+
+    setHistoryRecords((currentRecords) => [
+      {
+        id: crypto.randomUUID(),
+        name: cleanName,
+        presetLabel: "Stopwatch",
+        durationMinutes,
+        completedAt: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        completedAtISO: now.toISOString(),
+      },
+      ...currentRecords,
+    ]);
   };
 
   useEffect(() => {
@@ -299,6 +326,16 @@ export function PomodoroCard() {
   }, [isRunning]);
 
   useEffect(() => {
+    if (!stopwatchRunning) return;
+
+    const interval = setInterval(() => {
+      setStopwatchSeconds((currentValue) => currentValue + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [stopwatchRunning]);
+
+  useEffect(() => {
     if (secondsLeft > 0) {
       phaseCompletionHandledRef.current = false;
       return;
@@ -338,12 +375,35 @@ export function PomodoroCard() {
   };
 
   const startOrResumeSession = () => {
+    if (stopwatchActive) return;
     setSessionActive(true);
     setIsRunning(true);
   };
 
   const pauseSession = () => {
     setIsRunning(false);
+  };
+
+  const startStopwatch = () => {
+    if (sessionActive) return;
+    setStopwatchActive(true);
+    setStopwatchRunning(true);
+  };
+
+  const pauseStopwatch = () => {
+    setStopwatchRunning(false);
+  };
+
+  const resumeStopwatch = () => {
+    if (sessionActive) return;
+    setStopwatchRunning(true);
+  };
+
+  const stopAndSaveStopwatch = () => {
+    addStopwatchRecord();
+    setStopwatchActive(false);
+    setStopwatchRunning(false);
+    setStopwatchSeconds(0);
   };
 
   const handlePresetSelect = (presetId: string) => {
@@ -404,14 +464,15 @@ export function PomodoroCard() {
 
   return (
     <main className="min-h-screen bg-black px-6 py-8 text-zinc-100">
-      <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="mx-auto grid w-full max-w-6xl items-stretch gap-6 lg:grid-cols-[320px_1fr]">
         <SessionHistory
           records={historyRecords}
           isLoading={isDriveLoading}
           onDeleteRecord={handleDeleteRecord}
         />
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 shadow-2xl shadow-black/40">
+        <div className="flex flex-col gap-6">
+        <section className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 shadow-2xl shadow-black/40 transition ${isPomodoroBlocked ? "pointer-events-none opacity-45" : ""}`}>
         <div className="flex flex-col items-center gap-6 text-center">
           <div className="flex w-full items-center justify-between">
             <button
@@ -496,6 +557,49 @@ export function PomodoroCard() {
           />
         </div>
         </section>
+        <section className={`rounded-2xl border border-zinc-800 bg-zinc-950/80 px-5 py-4 shadow-2xl shadow-black/40 transition ${isStopwatchBlocked ? "pointer-events-none opacity-45" : ""}`}>
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-3 text-center">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Open-ended timer</h2>
+            <div className="w-full max-w-sm text-left">
+              <label htmlFor="stopwatch-name" className="mb-1 block text-xs text-zinc-400">
+                Timer name
+              </label>
+              <input
+                id="stopwatch-name"
+                type="text"
+                value={stopwatchName}
+                onChange={(event) => setStopwatchName(event.target.value)}
+                placeholder="e.g. Research spike"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-sm text-zinc-100 outline-none transition focus:border-zinc-400"
+              />
+            </div>
+            <p className="select-none text-4xl font-bold tabular-nums tracking-widest text-zinc-100">
+              {formatTime(stopwatchSeconds)}
+            </p>
+            <div className="flex w-full max-w-sm gap-2">
+              <button
+                type="button"
+                onClick={stopwatchActive ? stopAndSaveStopwatch : startStopwatch}
+                className="flex-1 rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-black transition hover:bg-zinc-300"
+              >
+                {stopwatchActive ? "Stop & Save" : "Start Stopwatch"}
+              </button>
+              <button
+                type="button"
+                onClick={stopwatchRunning ? pauseStopwatch : resumeStopwatch}
+                disabled={!stopwatchActive}
+                className={`flex-1 rounded-lg border bg-zinc-900 px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40 disabled:border-zinc-700 disabled:hover:border-zinc-700 disabled:text-zinc-200 ${
+                  stopwatchRunning
+                    ? "border-zinc-700 text-zinc-200 hover:border-zinc-500"
+                    : "border-rose-500/50 text-rose-400 hover:border-rose-400/70 hover:text-rose-300"
+                }`}
+              >
+                {stopwatchRunning ? "Pause" : "Resume"}
+              </button>
+            </div>
+          </div>
+        </section>
+        </div>
       </div>
       <CustomPresetModal
         isOpen={isCustomModalOpen}

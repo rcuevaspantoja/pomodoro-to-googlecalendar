@@ -8,7 +8,7 @@ type SessionHistoryProps = {
 
 export function SessionHistory({ records, isLoading, onDeleteRecord }: SessionHistoryProps) {
   return (
-    <aside className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5 shadow-2xl shadow-black/40">
+    <aside className="h-full rounded-2xl border border-zinc-800 bg-zinc-950/80 p-5 shadow-2xl shadow-black/40">
       <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-400">Session log</h2>
 
       {isLoading ? (
@@ -24,12 +24,7 @@ export function SessionHistory({ records, isLoading, onDeleteRecord }: SessionHi
               key={record.id}
               className="group flex items-start justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900/70 px-3 py-2"
             >
-              <div className="flex items-start gap-3">
-                <img
-                  src="/sounds/images/check_mark.svg"
-                  alt="Completed"
-                  className="mt-0.5 h-4 w-4 opacity-90"
-                />
+              <div className="flex items-center">
                 <div>
                   <p className="text-sm font-medium text-zinc-100">{record.name}</p>
                   <p className="text-xs text-zinc-400">
