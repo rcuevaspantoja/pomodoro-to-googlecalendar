@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { PRESETS } from "./constants";
 import { CustomPresetModal } from "./CustomPresetModal";
 import { PhaseBadge } from "./PhaseBadge";
@@ -12,6 +13,8 @@ import { TimerDisplay } from "./TimerDisplay";
 import type { PomodoroHistoryRecord, PomodoroPreset } from "./types";
 
 export function PomodoroCard() {
+  const { data: session, status } = useSession();
+  const firstName = session?.user?.name?.trim().split(/\s+/)[0] ?? "there";
   const [selectedPresetId, setSelectedPresetId] = useState(PRESETS[0].id);
   const [sessionActive, setSessionActive] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -191,6 +194,29 @@ export function PomodoroCard() {
 
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950/80 p-8 shadow-2xl shadow-black/40">
         <div className="flex flex-col items-center gap-6 text-center">
+          <div className="flex w-full items-center justify-end">
+            {status === "authenticated" ? (
+              <div className="flex items-center gap-3 text-sm text-zinc-300">
+                <span>Hi, {firstName}</span>
+                <button
+                  type="button"
+                  onClick={() => void signOut()}
+                  className="rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 hover:text-white"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void signIn("google")}
+                className="inline-flex items-center gap-2 rounded-md border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:border-zinc-500 hover:text-white"
+              >
+                <img src="/sounds/images/google.svg" alt="Google logo" className="h-4 w-4" />
+                <span>LOGIN</span>
+              </button>
+            )}
+          </div>
           <h1 className="text-2xl font-semibold tracking-tight">Minimalist Pomodoro</h1>
 
           <div className="w-full max-w-sm text-left">
@@ -214,7 +240,11 @@ export function PomodoroCard() {
             onCustomPresetClick={handleCustomPresetClick}
           />
           <PhaseBadge isBreakTime={isBreakTime} />
-          <TimerDisplay secondsLeft={secondsLeft} isBreakTime={isBreakTime} />
+          <TimerDisplay
+            secondsLeft={secondsLeft}
+            isBreakTime={isBreakTime}
+            breakMinutes={selectedPreset.breakMinutes}
+          />
           <button
             type="button"
             onClick={toggleSoundMuted}
