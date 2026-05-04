@@ -1,5 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
+import { refreshGoogleAccessToken } from "@/lib/googleAccessToken";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -19,6 +20,7 @@ export const authOptions: NextAuthOptions = {
         params: {
           scope:
             "openid email profile https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.events",
+          access_type: "offline",
         },
       },
     }),
@@ -30,6 +32,36 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account }) {
       if (account?.access_token) {
         token.accessToken = account.access_token;
+        if (account.refresh_token) {
+          token.refreshToken = account.refresh_token;
+        }
+        token.expiresAt =
+          typeof account.expires_at === "number"
+            ? account.expires_at
+            : Math.floor(Date.now() / 1000 + 3600);
+        token.error = undefined;
+        return token;
+      }
+
+      const refreshToken = token.refreshToken;
+      const expiresAt = token.expiresAt;
+      if (typeof refreshToken === "string" && refreshToken.length > 0) {
+        const exp = typeof expiresAt === "number" ? expiresAt : 0;
+        const refreshIfBefore = exp - 120;
+        const shouldRefresh = exp === 0 || Date.now() / 1000 >= refreshIfBefore;
+        if (shouldRefresh) {
+          try {
+            const refreshed = await refreshGoogleAccessToken(refreshToken);
+            token.accessToken = refreshed.accessToken;
+            token.expiresAt = refreshed.expiresAt;
+            if (refreshed.refreshToken) {
+              token.refreshToken = refreshed.refreshToken;
+            }
+            token.error = undefined;
+          } catch {
+            token.error = "RefreshAccessTokenError";
+          }
+        }
       }
 
       return token;
@@ -37,6 +69,9 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (token.accessToken) {
         session.accessToken = token.accessToken as string;
+      }
+      if (token.error) {
+        session.error = token.error as string;
       }
 
       return session;

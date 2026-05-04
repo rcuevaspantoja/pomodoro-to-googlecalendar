@@ -41,6 +41,10 @@ export function PomodoroCard() {
   const soundMutedRef = useRef(false);
   const skipNextSyncRef = useRef(false);
   const skipNextSettingsSaveRef = useRef(false);
+  const secondsLeftRef = useRef(PRESETS[0].workMinutes * 60);
+  const pomodoroDeadlineMsRef = useRef<number | null>(null);
+  const stopwatchWallStartMsRef = useRef<number | null>(null);
+  const stopwatchElapsedBeforeRunMsRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -84,6 +88,10 @@ export function PomodoroCard() {
   );
 
   const [secondsLeft, setSecondsLeft] = useState(selectedPreset.workMinutes * 60);
+
+  useEffect(() => {
+    secondsLeftRef.current = secondsLeft;
+  }, [secondsLeft]);
 
   const addHistoryRecord = () => {
     const cleanName = pomodoroName.trim() || "Untitled session";
@@ -182,13 +190,20 @@ export function PomodoroCard() {
       try {
         const response = await fetch("/api/drive/settings", { cache: "no-store" });
         if (!response.ok) {
-          throw new Error("Unable to load settings");
+          if (!isCancelled) {
+            setCalendarSyncEnabled(false);
+          }
+          return;
         }
 
         const data = (await response.json()) as { calendarSyncEnabled?: boolean };
         if (!isCancelled) {
           skipNextSettingsSaveRef.current = true;
           setCalendarSyncEnabled(Boolean(data.calendarSyncEnabled));
+        }
+      } catch {
+        if (!isCancelled) {
+          setCalendarSyncEnabled(false);
         }
       } finally {
         if (!isCancelled) {
@@ -311,16 +326,39 @@ export function PomodoroCard() {
     setSessionActive(false);
     setIsRunning(false);
     setIsBreakTime(false);
-    setSecondsLeft(selectedPreset.workMinutes * 60);
+    pomodoroDeadlineMsRef.current = null;
+    const workSeconds = selectedPreset.workMinutes * 60;
+    setSecondsLeft(workSeconds);
+    secondsLeftRef.current = workSeconds;
     phaseCompletionHandledRef.current = false;
   }, [selectedPreset]);
+
+  const syncSecondsLeftFromPomodoroDeadline = () => {
+    const end = pomodoroDeadlineMsRef.current;
+    if (end == null) return;
+    const next = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    setSecondsLeft(next);
+    secondsLeftRef.current = next;
+  };
+
+  const syncStopwatchSecondsFromWall = () => {
+    const wallStart = stopwatchWallStartMsRef.current;
+    const baseMs = stopwatchElapsedBeforeRunMsRef.current;
+    if (wallStart == null) {
+      setStopwatchSeconds(Math.floor(baseMs / 1000));
+      return;
+    }
+    setStopwatchSeconds(Math.floor((baseMs + (Date.now() - wallStart)) / 1000));
+  };
 
   useEffect(() => {
     if (!isRunning) return;
 
     const interval = setInterval(() => {
-      setSecondsLeft((currentValue) => (currentValue > 0 ? currentValue - 1 : 0));
+      syncSecondsLeftFromPomodoroDeadline();
     }, 1000);
+
+    syncSecondsLeftFromPomodoroDeadline();
 
     return () => clearInterval(interval);
   }, [isRunning]);
@@ -329,11 +367,28 @@ export function PomodoroCard() {
     if (!stopwatchRunning) return;
 
     const interval = setInterval(() => {
-      setStopwatchSeconds((currentValue) => currentValue + 1);
+      syncStopwatchSecondsFromWall();
     }, 1000);
+
+    syncStopwatchSecondsFromWall();
 
     return () => clearInterval(interval);
   }, [stopwatchRunning]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (isRunning) {
+        syncSecondsLeftFromPomodoroDeadline();
+      }
+      if (stopwatchRunning) {
+        syncStopwatchSecondsFromWall();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [isRunning, stopwatchRunning]);
 
   useEffect(() => {
     if (secondsLeft > 0) {
@@ -350,52 +405,82 @@ export function PomodoroCard() {
       setSessionActive(false);
       setIsRunning(false);
       setIsBreakTime(false);
-      setSecondsLeft(selectedPreset.workMinutes * 60);
+      pomodoroDeadlineMsRef.current = null;
+      const workSecondsAfterBreak = selectedPreset.workMinutes * 60;
+      setSecondsLeft(workSecondsAfterBreak);
+      secondsLeftRef.current = workSecondsAfterBreak;
       return;
     }
 
     if (selectedPreset.breakMinutes > 0) {
+      const breakSeconds = selectedPreset.breakMinutes * 60;
       setIsBreakTime(true);
-      setSecondsLeft(selectedPreset.breakMinutes * 60);
+      setSecondsLeft(breakSeconds);
+      secondsLeftRef.current = breakSeconds;
+      if (isRunning) {
+        pomodoroDeadlineMsRef.current = Date.now() + breakSeconds * 1000;
+      }
       return;
     }
 
     completeSessionWithOptionalSound();
     setSessionActive(false);
     setIsRunning(false);
-    setSecondsLeft(selectedPreset.workMinutes * 60);
+    pomodoroDeadlineMsRef.current = null;
+    const workSeconds = selectedPreset.workMinutes * 60;
+    setSecondsLeft(workSeconds);
+    secondsLeftRef.current = workSeconds;
   }, [secondsLeft, isRunning, isBreakTime, selectedPreset, pomodoroName]);
 
   const stopPomodoroSession = () => {
     setSessionActive(false);
     setIsRunning(false);
     setIsBreakTime(false);
-    setSecondsLeft(selectedPreset.workMinutes * 60);
+    pomodoroDeadlineMsRef.current = null;
+    const workSeconds = selectedPreset.workMinutes * 60;
+    setSecondsLeft(workSeconds);
+    secondsLeftRef.current = workSeconds;
     phaseCompletionHandledRef.current = false;
   };
 
   const startOrResumeSession = () => {
     if (stopwatchActive) return;
     setSessionActive(true);
+    pomodoroDeadlineMsRef.current = Date.now() + secondsLeftRef.current * 1000;
     setIsRunning(true);
   };
 
   const pauseSession = () => {
+    if (pomodoroDeadlineMsRef.current != null) {
+      const remaining = Math.max(0, Math.ceil((pomodoroDeadlineMsRef.current - Date.now()) / 1000));
+      setSecondsLeft(remaining);
+      secondsLeftRef.current = remaining;
+    }
+    pomodoroDeadlineMsRef.current = null;
     setIsRunning(false);
   };
 
   const startStopwatch = () => {
     if (sessionActive) return;
     setStopwatchActive(true);
+    stopwatchElapsedBeforeRunMsRef.current = 0;
+    stopwatchWallStartMsRef.current = Date.now();
     setStopwatchRunning(true);
   };
 
   const pauseStopwatch = () => {
+    const wallStart = stopwatchWallStartMsRef.current;
+    if (wallStart != null) {
+      stopwatchElapsedBeforeRunMsRef.current += Date.now() - wallStart;
+      stopwatchWallStartMsRef.current = null;
+      setStopwatchSeconds(Math.floor(stopwatchElapsedBeforeRunMsRef.current / 1000));
+    }
     setStopwatchRunning(false);
   };
 
   const resumeStopwatch = () => {
     if (sessionActive) return;
+    stopwatchWallStartMsRef.current = Date.now();
     setStopwatchRunning(true);
   };
 
@@ -403,6 +488,8 @@ export function PomodoroCard() {
     addStopwatchRecord();
     setStopwatchActive(false);
     setStopwatchRunning(false);
+    stopwatchWallStartMsRef.current = null;
+    stopwatchElapsedBeforeRunMsRef.current = 0;
     setStopwatchSeconds(0);
   };
 

@@ -1,6 +1,6 @@
 import { google } from "googleapis";
-import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
+import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
 
 const SETTINGS_FILE_NAME = "pomodoro-settings.json";
 
@@ -16,12 +16,6 @@ function getDriveClient(accessToken: string) {
   return google.drive({ version: "v3", auth: oauth2Client });
 }
 
-async function getAccessTokenFromRequest(request: NextRequest) {
-  const token = await getToken({ req: request });
-  const accessToken = token?.accessToken;
-  return typeof accessToken === "string" && accessToken.length > 0 ? accessToken : null;
-}
-
 async function findSettingsFileId(drive: ReturnType<typeof google.drive>) {
   const response = await drive.files.list({
     spaces: "appDataFolder",
@@ -34,7 +28,7 @@ async function findSettingsFileId(drive: ReturnType<typeof google.drive>) {
 }
 
 export async function GET(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
   if (!accessToken) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -62,7 +56,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
   if (!accessToken) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {

@@ -1,18 +1,12 @@
 import { google } from "googleapis";
-import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
+import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
 import type { PomodoroHistoryRecord } from "@/components/pomodoro/types";
 
 function getCalendarClient(accessToken: string) {
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
   return google.calendar({ version: "v3", auth: oauth2Client });
-}
-
-async function getAccessTokenFromRequest(request: NextRequest) {
-  const token = await getToken({ req: request });
-  const accessToken = token?.accessToken;
-  return typeof accessToken === "string" && accessToken.length > 0 ? accessToken : null;
 }
 
 function parseStartDateFromRecord(record: PomodoroHistoryRecord) {
@@ -43,7 +37,7 @@ function parseStartDateFromRecord(record: PomodoroHistoryRecord) {
 }
 
 export async function POST(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
   if (!accessToken) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -78,7 +72,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
   if (!accessToken) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   try {

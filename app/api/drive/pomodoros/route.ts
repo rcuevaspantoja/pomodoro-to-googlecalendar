@@ -1,6 +1,6 @@
 import { google } from "googleapis";
-import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
+import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
 import type { PomodoroHistoryRecord } from "@/components/pomodoro/types";
 
 const DRIVE_FILE_NAME = "pomodoro-sessions.json";
@@ -29,14 +29,8 @@ async function findPomodoroFileId(drive: ReturnType<typeof google.drive>) {
   return response.data.files?.[0]?.id;
 }
 
-async function getAccessTokenFromRequest(request: NextRequest) {
-  const token = await getToken({ req: request });
-  const accessToken = token?.accessToken;
-  return typeof accessToken === "string" && accessToken.length > 0 ? accessToken : null;
-}
-
 export async function GET(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
 
   if (!accessToken) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -70,7 +64,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const accessToken = await getAccessTokenFromRequest(request);
+  const accessToken = await resolveGoogleAccessTokenFromRequest(request);
 
   if (!accessToken) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
