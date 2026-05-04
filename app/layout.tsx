@@ -1,5 +1,10 @@
+import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/auth/AuthProvider";
+
+export const metadata: Metadata = {
+  title: "Minimalist Pomodoro",
+};
 
 export default function RootLayout({
   children,

@@ -13,6 +13,8 @@ import { TimerDisplay } from "./TimerDisplay";
 import { formatTime } from "./utils";
 import type { PomodoroHistoryRecord, PomodoroPreset } from "./types";
 
+const DEFAULT_PAGE_TITLE = "Minimalist Pomodoro";
+
 export function PomodoroCard() {
   const { data: session, status } = useSession();
   const firstName = session?.user?.name?.trim().split(/\s+/)[0] ?? "there";
@@ -389,6 +391,23 @@ export function PomodoroCard() {
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [isRunning, stopwatchRunning]);
+
+  useEffect(() => {
+    if (sessionActive) {
+      const phase = isBreakTime ? "Break" : "Focus";
+      document.title = `${phase}-${formatTime(secondsLeft)}`;
+    } else if (stopwatchActive) {
+      document.title = `Stopwatch-${formatTime(stopwatchSeconds)}`;
+    } else {
+      document.title = DEFAULT_PAGE_TITLE;
+    }
+  }, [sessionActive, isBreakTime, secondsLeft, stopwatchActive, stopwatchSeconds]);
+
+  useEffect(() => {
+    return () => {
+      document.title = DEFAULT_PAGE_TITLE;
+    };
+  }, []);
 
   useEffect(() => {
     if (secondsLeft > 0) {
