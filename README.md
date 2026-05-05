@@ -2,6 +2,10 @@
 
 A minimal **Pomodoro** and **open-ended timer** in the browser. Sign in with Google to sync session history to **Google Drive** (app data folder) and optionally push completed sessions to **Google Calendar**.
 
+<p align="center">
+  <img src="public/img/banner.png" alt="Pomodoro to Google Calendar" style="width: 75%; max-width: 100%;" />
+</p>
+
 ## Disclaimer (hosted / live build)
 
 The **public web deployment** is wired to **my Google OAuth credentials** for cost and billing reasons, so **Google sign-in and Drive/Calendar sync on that live site only work with my Gmail account**. Everyone else can still use the timers in the browser; cloud sync needs your own setup.
