@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { getSession, signIn, signOut, useSession } from "next-auth/react";
 import { PRESETS } from "./constants";
 import { CustomPresetModal } from "./CustomPresetModal";
 import { PhaseBadge } from "./PhaseBadge";
@@ -150,71 +150,46 @@ export function PomodoroCard() {
 
     let isCancelled = false;
 
-    const loadFromDrive = async () => {
+    const loadDriveBootstrap = async () => {
       setSyncStatus("syncing");
       try {
-        const response = await fetch("/api/drive/pomodoros", { cache: "no-store" });
+        await getSession();
+        if (isCancelled) return;
+
+        const response = await fetch("/api/drive/bootstrap", { cache: "no-store" });
         if (!response.ok) {
-          throw new Error("Unable to load records");
+          throw new Error("Unable to load drive data");
         }
 
-        const data = (await response.json()) as { records?: PomodoroHistoryRecord[] };
-        if (!isCancelled && Array.isArray(data.records)) {
-          // Evita que la hidratacion inicial desde Drive dispare un POST innecesario.
+        const data = (await response.json()) as {
+          records?: PomodoroHistoryRecord[];
+          calendarSyncEnabled?: boolean;
+        };
+
+        if (isCancelled) return;
+
+        skipNextSettingsSaveRef.current = true;
+        setCalendarSyncEnabled(Boolean(data.calendarSyncEnabled));
+
+        if (Array.isArray(data.records)) {
           skipNextSyncRef.current = true;
           setHistoryRecords(data.records);
-          setSyncStatus("synced");
         }
+        setSyncStatus("synced");
       } catch {
         if (!isCancelled) {
+          setCalendarSyncEnabled(false);
           setSyncStatus("error");
         }
       } finally {
         if (!isCancelled) {
           setDidLoadDriveData(true);
-        }
-      }
-    };
-
-    void loadFromDrive();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [status]);
-
-  useEffect(() => {
-    if (status !== "authenticated") return;
-
-    let isCancelled = false;
-
-    const loadSettingsFromDrive = async () => {
-      try {
-        const response = await fetch("/api/drive/settings", { cache: "no-store" });
-        if (!response.ok) {
-          if (!isCancelled) {
-            setCalendarSyncEnabled(false);
-          }
-          return;
-        }
-
-        const data = (await response.json()) as { calendarSyncEnabled?: boolean };
-        if (!isCancelled) {
-          skipNextSettingsSaveRef.current = true;
-          setCalendarSyncEnabled(Boolean(data.calendarSyncEnabled));
-        }
-      } catch {
-        if (!isCancelled) {
-          setCalendarSyncEnabled(false);
-        }
-      } finally {
-        if (!isCancelled) {
           setDidLoadDriveSettings(true);
         }
       }
     };
 
-    void loadSettingsFromDrive();
+    void loadDriveBootstrap();
 
     return () => {
       isCancelled = true;
