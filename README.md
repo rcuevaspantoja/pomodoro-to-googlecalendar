@@ -1,48 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pomodoro to Google Calendar
 
-## Getting Started
+A minimal **Pomodoro** and **open-ended timer** in the browser. Sign in with Google to sync session history to **Google Drive** (app data folder) and optionally push completed sessions to **Google Calendar**.
 
-First, run the development server:
+## Disclaimer (hosted / live build)
+
+The **public web deployment** is wired to **my Google OAuth credentials** for cost and billing reasons, so **Google sign-in and Drive/Calendar sync on that live site only work with my Gmail account**. Everyone else can still use the timers in the browser; cloud sync needs your own setup.
+
+To get **full sync with your Google account**, run the app **locally** (or deploy your own instance): **fork this repo**, add your own `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `NEXTAUTH_*` values as described below, then `npm run dev` or host it yourself.
+
+## What it does
+
+- **Focus / break timer** — presets plus a custom duration; work and break phases with optional sound when a block ends.
+- **Stopwatch** — count-up timer for open-ended tasks; save elapsed time into the same history list.
+- **Session history** — stored locally in the UI; with Google login, lists sync to a small JSON file in Drive so they follow you across devices.
+- **Calendar (optional)** — in settings, enable sync to create calendar events from completed sessions.
+- **Tab title** — while a timer runs, the browser tab shows `Focus-MM:SS`, `Break-MM:SS`, or `Stopwatch-MM:SS` so you can glance at the time without focusing the tab.
+
+Timers use wall-clock timing so background tabs stay accurate when the browser throttles `setInterval`.
+
+## Tech
+
+Next.js (App Router), React, NextAuth (JWT) with Google OAuth, Google Drive API (`drive.appdata`) and Calendar API.
+
+## Run locally
+
+1. Create `.env.local` with:
+
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — OAuth Web client from Google Cloud  
+   - `NEXTAUTH_URL` — e.g. `http://localhost:3000`  
+   - `NEXTAUTH_SECRET` — random string (e.g. `openssl rand -base64 32`)
+
+2. In Google Cloud Console → **Credentials** → your OAuth client:
+
+   - **Authorized JavaScript origins**: `http://localhost:3000`  
+   - **Authorized redirect URIs**: `http://localhost:3000/api/auth/callback/google`
+
+3. Install and start:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Use **Login** for Google; logout clears the client session only (Drive data stays in your account).
 
-## Google login setup (local)
+## Scripts
 
-1. Copy `.env.local.example` to `.env.local`.
-2. Fill in:
-   - `GOOGLE_CLIENT_ID`
-   - `GOOGLE_CLIENT_SECRET`
-   - `NEXTAUTH_SECRET`
-3. In Google Cloud OAuth credentials, verify:
-   - Authorized origin: `http://localhost:3000`
-   - Redirect URI: `http://localhost:3000/api/auth/callback/google`
-4. Run `npm run dev` and use the `Logear con Google` button.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command       | Description        |
+| ------------- | ------------------ |
+| `npm run dev` | Development server |
+| `npm run build` | Production build |
+| `npm run start` | Run production build |
+| `npm run lint` | ESLint             |
