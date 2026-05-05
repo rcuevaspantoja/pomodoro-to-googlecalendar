@@ -1,6 +1,9 @@
 import { google } from "googleapis";
 import type { NextRequest } from "next/server";
-import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
+import {
+  httpStatusFromGoogleApiError,
+  resolveGoogleAccessTokenFromRequest,
+} from "@/lib/googleAccessToken";
 import type { PomodoroHistoryRecord } from "@/components/pomodoro/types";
 
 const DRIVE_FILE_NAME = "pomodoro-sessions.json";
@@ -59,7 +62,7 @@ export async function GET(request: NextRequest) {
     return Response.json({ records: parsed.records ?? [], source: "drive" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load pomodoros";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }
 
@@ -110,6 +113,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save pomodoros";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }

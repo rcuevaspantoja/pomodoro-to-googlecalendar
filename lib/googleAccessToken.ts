@@ -1,6 +1,12 @@
 import { getToken } from "next-auth/jwt";
 import type { NextRequest } from "next/server";
 
+/** NextAuth / Google sometimes store absolute expiry as ms; API logic expects Unix seconds. */
+export function normalizeOAuthExpiresAtSeconds(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value > 1_000_000_000_000 ? Math.floor(value / 1000) : Math.floor(value);
+}
+
 export async function refreshGoogleAccessToken(refreshToken: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -45,25 +51,53 @@ export async function refreshGoogleAccessToken(refreshToken: string) {
  * `getToken` no ejecuta el callback JWT de NextAuth, así que la renovación debe hacerse aquí en rutas API.
  */
 export async function resolveGoogleAccessTokenFromRequest(request: NextRequest): Promise<string | null> {
-  const token = await getToken({ req: request });
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
   if (!token) return null;
 
-  let accessToken = typeof token.accessToken === "string" ? token.accessToken : "";
+  const accessToken = typeof token.accessToken === "string" ? token.accessToken : "";
   const refreshToken = typeof token.refreshToken === "string" ? token.refreshToken : "";
-  const expiresAt = typeof token.expiresAt === "number" ? token.expiresAt : 0;
+  const expiresAt = normalizeOAuthExpiresAtSeconds(
+    typeof token.expiresAt === "number" ? token.expiresAt : 0,
+  );
   const nowSec = Date.now() / 1000;
 
-  const shouldRefresh =
-    refreshToken.length > 0 && (!accessToken || expiresAt === 0 || nowSec >= expiresAt - 120);
+  const accessStillFresh =
+    accessToken.length > 0 && expiresAt > 0 && nowSec < expiresAt - 120;
 
-  if (shouldRefresh) {
+  if (accessStillFresh) {
+    return accessToken;
+  }
+
+  if (refreshToken.length > 0) {
     try {
-      const refreshed = await refreshGoogleAccessToken(refreshToken);
-      return refreshed.accessToken;
+      return (await refreshGoogleAccessToken(refreshToken)).accessToken;
     } catch {
-      return accessToken.length > 0 ? accessToken : null;
+      return null;
     }
   }
 
-  return accessToken.length > 0 ? accessToken : null;
+  // Sin refresh_token: solo devolver access si aún no ha caducado (evita mandar token muerto a Drive → 500).
+  if (accessToken.length > 0 && expiresAt > 0 && nowSec < expiresAt) {
+    return accessToken;
+  }
+
+  // JWT antiguo sin expiresAt: último intento con el access guardado (puede fallar en Google si ya expiró).
+  if (accessToken.length > 0 && expiresAt === 0) {
+    return accessToken;
+  }
+
+  return null;
+}
+
+/** Maps Gaxios / googleapis failures to HTTP status (avoid reporting Google 401 as 500). */
+export function httpStatusFromGoogleApiError(error: unknown): number {
+  if (error && typeof error === "object" && "response" in error) {
+    const status = (error as { response?: { status?: number } }).response?.status;
+    if (status === 401) return 401;
+    if (status === 403) return 403;
+  }
+  return 500;
 }

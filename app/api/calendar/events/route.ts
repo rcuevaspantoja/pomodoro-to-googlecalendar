@@ -1,6 +1,9 @@
 import { google } from "googleapis";
 import type { NextRequest } from "next/server";
-import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
+import {
+  httpStatusFromGoogleApiError,
+  resolveGoogleAccessTokenFromRequest,
+} from "@/lib/googleAccessToken";
 import type { PomodoroHistoryRecord } from "@/components/pomodoro/types";
 
 function getCalendarClient(accessToken: string) {
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to sync calendar event";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }
 
@@ -104,6 +107,6 @@ export async function DELETE(request: NextRequest) {
 
     const message =
       error instanceof Error ? error.message : "Failed to delete calendar event";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }

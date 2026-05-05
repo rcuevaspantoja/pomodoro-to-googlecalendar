@@ -1,6 +1,9 @@
 import { google } from "googleapis";
 import type { NextRequest } from "next/server";
-import { resolveGoogleAccessTokenFromRequest } from "@/lib/googleAccessToken";
+import {
+  httpStatusFromGoogleApiError,
+  resolveGoogleAccessTokenFromRequest,
+} from "@/lib/googleAccessToken";
 
 const SETTINGS_FILE_NAME = "pomodoro-settings.json";
 
@@ -51,7 +54,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load settings";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }
 
@@ -96,6 +99,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to save settings";
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message }, { status: httpStatusFromGoogleApiError(error) });
   }
 }

@@ -1,6 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { refreshGoogleAccessToken } from "@/lib/googleAccessToken";
+import { normalizeOAuthExpiresAtSeconds, refreshGoogleAccessToken } from "@/lib/googleAccessToken";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -37,16 +37,18 @@ export const authOptions: NextAuthOptions = {
         }
         token.expiresAt =
           typeof account.expires_at === "number"
-            ? account.expires_at
+            ? normalizeOAuthExpiresAtSeconds(account.expires_at)
             : Math.floor(Date.now() / 1000 + 3600);
         token.error = undefined;
         return token;
       }
 
       const refreshToken = token.refreshToken;
-      const expiresAt = token.expiresAt;
+      const expiresAtRaw = token.expiresAt;
       if (typeof refreshToken === "string" && refreshToken.length > 0) {
-        const exp = typeof expiresAt === "number" ? expiresAt : 0;
+        const exp =
+          typeof expiresAtRaw === "number" ? normalizeOAuthExpiresAtSeconds(expiresAtRaw) : 0;
+        token.expiresAt = exp;
         const refreshIfBefore = exp - 120;
         const shouldRefresh = exp === 0 || Date.now() / 1000 >= refreshIfBefore;
         if (shouldRefresh) {
